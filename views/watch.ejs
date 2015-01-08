@@ -1,0 +1,160 @@
+<html>
+  <head>
+    <title>TEST</title>
+    <script src="https://cdn.socket.io/socket.io-1.2.1.js"></script>
+  </head>
+  <body>
+    <div id="player"></div>
+
+    <% 
+      if(!listener) {
+    %>
+      <br/>Share Link: <input type="text" value="<%= shareLink %>" size="100"/>
+    <%
+      }
+    %>
+    <script>
+      var timeInterval;
+      var prevTime;
+      var data = { ishost: false, host: '' };
+
+      <% 
+        if(listener) {
+      %>
+          data.ishost = true;
+      <%
+        } else {
+      %>
+          data.host = '<%= sessionHost %>';
+      <%
+        }
+      %>
+
+      var socket = io('localhost:3000', data);
+
+      console.log(data);
+      // 2. This code loads the IFrame Player API code asynchronously.
+      var tag = document.createElement('script');
+
+      tag.src = "https://www.youtube.com/iframe_api";
+      var firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+      var vars = {};
+
+      <% 
+        if(listener) {
+      %>
+          vars = { controls: 0 }
+      <%
+        }
+      %>
+      
+      // 3. This function creates an <iframe> (and YouTube player)
+      //    after the API code downloads.
+      var player;
+      function onYouTubeIframeAPIReady() {
+        player = new YT.Player('player', {
+          height: '390',
+          width: '640',
+          videoId: '<%= video %>',
+          playerVars: vars,
+          events: {
+            'onReady': onPlayerReady,
+            'onStateChange': onPlayerStateChange
+          }
+        });
+      }
+
+      // 4. The API will call this function when the video player is ready.
+      function onPlayerReady(event) {
+        event.target.playVideo();
+      }
+
+      // 5. The API calls this function when the player's state changes.
+      //    The function indicates that when playing a video (state=1),
+      //    the player should play for six seconds and then stop.
+      var done = false;
+      function onPlayerStateChange(event) {
+        if (event.data == YT.PlayerState.PLAYING && !done) {
+          setTimeout(stopVideo, 6000);
+          done = true;
+        }
+
+        if(event.data == YT.PlayerState.PAUSED) {
+          <% 
+            if(!listener) {
+          %>
+            socket.emit('pause', {room: '<%= sessionHost %>', time: player.getCurrentTime() });
+          <%
+            }
+          %>
+        }
+
+        if(event.data == YT.PlayerState.PLAYING) {
+          <% 
+            if(!listener) {
+          %>
+            socket.emit('play', {room: '<%= sessionHost %>', time: player.getCurrentTime() });
+            prevTime = player.getCurrentTime();
+            clearInterval(timeInterval);
+            initInterval();
+          <%
+            }
+          %>
+        }
+      }
+
+      <%
+        if(listener){
+      %>
+          socket.emit('join', '<%= sessionHost %>');
+      <%
+        }
+      %>
+
+
+      <% 
+        if(!listener) {
+      %>
+      function initInterval() {
+        timeInterval = setInterval(function(item) {
+          console.log('interval', ~~(player.getCurrentTime() - prevTime));
+          if(~~(player.getCurrentTime() - prevTime) > 2) {
+            socket.emit('play-seek', { time: player.getCurrentTime(), state: player.getPlayerState(), room: '<%= sessionHost %>' });
+          }
+          prevTime = player.getCurrentTime();
+        }, 1000);
+      }
+      <%
+        }
+      %>
+      function stopVideo() {
+        player.stopVideo();
+      }
+
+      <% 
+        if(listener) {
+      %>
+          socket.on('pause', function(msg){
+            player.seekTo(msg); 
+            player.pauseVideo();
+          });
+
+          socket.on('play', function(msg){
+            player.seekTo(msg);
+            player.playVideo();
+          });
+
+          socket.on('play-seek', function(data) {
+            player.seekTo(data[0]);
+            if(data[1] == 1) {
+              player.playVideo();
+            }
+          });
+      <%
+        }
+      %>
+      </script>
+  </body>
+</html>
